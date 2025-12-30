@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from exit import check_exit_5m 
 import requests
+from strategy_utils import detect_market_regime
 
 
 MODEL_FILE = "model_year.pkl"
@@ -122,14 +123,16 @@ def push_summary(summary):
     print(summary)
     try:
         r = requests.post(
-            "https://trader-python.vercel.app/api/push",
-            # "http://localhost:3000/api/push",
+            # "https://trader-python.vercel.app/api/push",
+            "http://localhost:3000/api/push",
             json=summary,
             timeout=5
         )
         print("push_summary:", r.status_code)
     except Exception as e:
         print("push_summary ERROR:", e)
+
+is_hold = False
 
 while True:
     df = load_ohlcv_from_db()
@@ -141,6 +144,9 @@ while True:
 
     price = float(last["close"])
     now = last.name
+    print(buy,sell)
+    regime = detect_market_regime(df)
+
 
     # ---------- BUY ----------
     if signal == "BUY" and not in_position:
@@ -183,13 +189,16 @@ while True:
             entry_price = None
             entry_time = None
             max_price = None
+            is_hold = False
 
         # ----- HOLD -----
-        else:
+        elif not is_hold:
             push_summary({
                 "time": str(now),
                 "price": price,
-                "signal": "HOLD"
+                "signal": ""
+                "HOLD"
             })
+            is_hold = True
     time.sleep(20)
 
