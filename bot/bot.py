@@ -13,6 +13,7 @@ import ta
 import time
 from datetime import datetime
 from exit import check_exit_5m 
+import requests
 
 
 MODEL_FILE = "model_year.pkl"
@@ -115,6 +116,21 @@ def log_trade(msg):
         f.write(line + "\n")
 
 
+
+
+def push_summary(summary):
+    print(summary)
+    try:
+        r = requests.post(
+            "https://trader-python.vercel.app/api/push",
+            # "http://localhost:3000/api/push",
+            json=summary,
+            timeout=5
+        )
+        print("push_summary:", r.status_code)
+    except Exception as e:
+        print("push_summary ERROR:", e)
+
 while True:
     df = load_ohlcv_from_db()
     df = add_features(df)
@@ -122,30 +138,58 @@ while True:
 
     model, buy, sell = predict_signal(model, last, cfg["features"])
     signal = strategy(df, buy, sell)
-    price = float(last['close'])
-    now = last.name 
 
-    # ---- BUY ----
-    print(signal,buy,sell)
+    price = float(last["close"])
+    now = last.name
+
+    # ---------- BUY ----------
     if signal == "BUY" and not in_position:
         in_position = True
         entry_price = price
         entry_time = now
-        log_trade(f"BUY  @ {entry_price:.2f} | time={entry_time}")
+        max_price = price
 
-    # ---- SELL ----
-    if in_position:
+        log_trade(f"BUY @ {entry_price:.2f} | time={entry_time}")
+
+        push_summary({
+            "time": str(now),
+            "price": price,
+            "signal": "BUY"
+        })
+
+    # ---------- IN POSITION ----------
+    elif in_position:
         max_price = max(max_price, price)
 
-        exit_reason, pnl = check_exit_5m(df, entry_price, entry_time, max_price)
+        exit_reason, pnl = check_exit_5m(
+            df,
+            entry_price,
+            entry_time,
+            max_price
+        )
+
+        # ----- EXIT -----
         if exit_reason:
             log_trade(f"{exit_reason} @ {price:.2f} | PnL={pnl:.2f}%")
+
+            push_summary({
+                "time": str(now),
+                "price": price,
+                "signal": exit_reason,
+                "pnl": pnl
+            })
+
             in_position = False
             entry_price = None
             entry_time = None
             max_price = None
-            continue
 
-
+        # ----- HOLD -----
+        else:
+            push_summary({
+                "time": str(now),
+                "price": price,
+                "signal": "HOLD"
+            })
     time.sleep(20)
 
