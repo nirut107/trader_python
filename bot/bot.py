@@ -123,8 +123,8 @@ def push_summary(summary):
     print(summary)
     try:
         r = requests.post(
-            # "https://trader-python.vercel.app/api/push",
-            "http://localhost:3000/api/push",
+            "https://trader-python.vercel.app/api/push",
+            # "http://localhost:3000/api/push",
             json=summary,
             timeout=5
         )
