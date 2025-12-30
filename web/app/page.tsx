@@ -33,14 +33,38 @@ export default function Page() {
   const pnlToday = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return history
-      .filter(
-        (e) =>
-          e.pnl !== undefined &&
-          e.time &&
-          e.time.startsWith(today)
-      )
+      .filter((e) => e.pnl !== undefined && e.time && e.time.startsWith(today))
       .reduce((s, e) => s + (e.pnl ?? 0), 0);
   }, [history]);
+
+  const regimeStats = useMemo(() => calcRegimeStats(history), [history]);
+
+  type Regime = "UPTREND" | "SIDEWAYS" | "DOWNTREND";
+
+  type RegimeStat = {
+    trades: number;
+    wins: number;
+    totalPnl: number;
+  };
+
+  function calcRegimeStats(history: any[]) {
+    const stats: Record<Regime, RegimeStat> = {
+      UPTREND: { trades: 0, wins: 0, totalPnl: 0 },
+      SIDEWAYS: { trades: 0, wins: 0, totalPnl: 0 },
+      DOWNTREND: { trades: 0, wins: 0, totalPnl: 0 },
+    };
+
+    history.forEach((e) => {
+      if (e.pnl === undefined || !e.regime) return;
+
+      const r = e.regime as Regime;
+      stats[r].trades += 1;
+      stats[r].totalPnl += e.pnl;
+      if (e.pnl > 0) stats[r].wins += 1;
+    });
+
+    return stats;
+  }
 
   if (loading) {
     return <div style={{ padding: 20 }}>Loading…</div>;
@@ -114,9 +138,7 @@ export default function Page() {
             >
               {latest.signal ?? "HOLD"}
             </div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              {latest.time}
-            </div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>{latest.time}</div>
           </div>
 
           {/* PRICE + PNL */}
@@ -137,9 +159,7 @@ export default function Page() {
               }}
             >
               <div style={{ fontSize: 12, opacity: 0.7 }}>Price</div>
-              <div style={{ fontSize: 20 }}>
-                {latest.price?.toFixed(2)}
-              </div>
+              <div style={{ fontSize: 20 }}>{latest.price?.toFixed(2)}</div>
             </div>
 
             <div
@@ -162,9 +182,7 @@ export default function Page() {
                       : fg,
                 }}
               >
-                {latest.pnl !== undefined
-                  ? `${latest.pnl.toFixed(2)} %`
-                  : "-"}
+                {latest.pnl !== undefined ? `${latest.pnl.toFixed(2)} %` : "-"}
               </div>
             </div>
           </div>
@@ -181,9 +199,7 @@ export default function Page() {
           background: card,
         }}
       >
-        <div style={{ fontSize: 12, opacity: 0.7 }}>
-          📊 PnL Today
-        </div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>📊 PnL Today</div>
         <div
           style={{
             fontSize: 24,
@@ -193,6 +209,53 @@ export default function Page() {
         >
           {pnlToday.toFixed(2)} %
         </div>
+      </div>
+      <h3>📊 Regime Stats</h3>
+
+      <div style={{ fontSize: 14, marginBottom: 24 }}>
+        {Object.entries(regimeStats).map(([regime, s]) => {
+          if (s.trades === 0) return null;
+
+          const winRate = (s.wins / s.trades) * 100;
+          const avgPnl = s.totalPnl / s.trades;
+
+          return (
+            <div
+              key={regime}
+              style={{
+                border: `1px solid ${border}`,
+                borderRadius: 10,
+                padding: 12,
+                marginBottom: 8,
+                background: card,
+              }}
+            >
+              <b>{regime}</b>
+              <div>Trades: {s.trades}</div>
+              <div>Win rate: {winRate.toFixed(0)}%</div>
+              <div>
+                Avg PnL:{" "}
+                <span
+                  style={{
+                    color: avgPnl >= 0 ? "#22c55e" : "#ef4444",
+                  }}
+                >
+                  {avgPnl.toFixed(2)}%
+                </span>
+              </div>
+              <div>
+                Total:{" "}
+                <span
+                  style={{
+                    color: s.totalPnl >= 0 ? "#22c55e" : "#ef4444",
+                  }}
+                >
+                  {s.totalPnl.toFixed(2)}%
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* 📜 TRADE HISTORY */}
@@ -213,8 +276,7 @@ export default function Page() {
               }}
             >
               <div>
-                {e.signal}{" "}
-                {e.price && `@ ${e.price.toFixed(2)}`}
+                {e.signal} {e.price && `@ ${e.price.toFixed(2)}`}
               </div>
 
               {e.pnl !== undefined && (
@@ -227,9 +289,7 @@ export default function Page() {
                 </div>
               )}
 
-              <div style={{ fontSize: 11, opacity: 0.6 }}>
-                {e.time}
-              </div>
+              <div style={{ fontSize: 11, opacity: 0.6 }}>{e.time}</div>
             </div>
           ))}
       </div>

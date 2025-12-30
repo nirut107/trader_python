@@ -144,34 +144,43 @@ while True:
 
     price = float(last["close"])
     now = last.name
-    print(buy,sell)
-    regime = detect_market_regime(df)
 
+    regime = detect_market_regime(df)
+    print("REGIME:", regime, "BUY/SELL:", buy, sell)
 
     # ---------- BUY ----------
     if signal == "BUY" and not in_position:
-        in_position = True
-        entry_price = price
-        entry_time = now
-        max_price = price
+        if regime != "UPTREND":
+            print("BLOCK BUY: regime =", regime)
+        else:
+            in_position = True
+            entry_price = price
+            entry_time = now
+            max_price = price
+            is_hold = False
 
-        log_trade(f"BUY @ {entry_price:.2f} | time={entry_time}")
+            log_trade(f"BUY @ {entry_price:.2f} | time={entry_time}")
 
-        push_summary({
-            "time": str(now),
-            "price": price,
-            "signal": "BUY"
-        })
+            push_summary({
+                "time": str(now),
+                "price": price,
+                "signal": "BUY",
+                "regime": regime
+            })
 
     # ---------- IN POSITION ----------
     elif in_position:
         max_price = max(max_price, price)
 
+        # ถ้าเป็น DOWNTREND → ให้ exit ง่ายขึ้น
+        tighten = (regime == "DOWNTREND")
+
         exit_reason, pnl = check_exit_5m(
             df,
             entry_price,
             entry_time,
-            max_price
+            max_price,
+            tighten=tighten   # <--- สำคัญ
         )
 
         # ----- EXIT -----
@@ -182,7 +191,8 @@ while True:
                 "time": str(now),
                 "price": price,
                 "signal": exit_reason,
-                "pnl": pnl
+                "pnl": pnl,
+                "regime": regime
             })
 
             in_position = False
@@ -191,14 +201,16 @@ while True:
             max_price = None
             is_hold = False
 
-        # ----- HOLD -----
+        # ----- HOLD (ส่งครั้งเดียว) -----
         elif not is_hold:
             push_summary({
                 "time": str(now),
                 "price": price,
-                "signal": ""
-                "HOLD"
+                "signal": "HOLD",
+                "regime": regime
             })
             is_hold = True
+
     time.sleep(20)
+
 
