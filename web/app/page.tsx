@@ -182,7 +182,9 @@ export default function Page() {
                       : fg,
                 }}
               >
-                {latest.pnl !== undefined ? `${latest.pnl.toFixed(2)} %` : "-"}
+                {latest.pnl !== undefined && latest.pnl !== null
+                  ? `${Number(latest.pnl).toFixed(2)} %`
+                  : "-"}
               </div>
             </div>
           </div>
@@ -276,7 +278,7 @@ export default function Page() {
               }}
             >
               <div>
-                {e.signal} {e.price && `@ ${e.price.toFixed(2)}`}
+                {e.signal} {e.price && `@ ${Number(e.price).toFixed(2)}`}
               </div>
 
               {e.pnl !== undefined && (
@@ -285,7 +287,7 @@ export default function Page() {
                     color: e.pnl >= 0 ? "#22c55e" : "#ef4444",
                   }}
                 >
-                  PnL: {e.pnl.toFixed(2)}%
+                  PnL: {Number(e.pnl).toFixed(2)}%
                 </div>
               )}
 

@@ -1,24 +1,30 @@
-let history: any[] = [];
+import  prisma  from "@/lib/prisma";
 
 export async function POST(req: Request) {
   const data = await req.json();
 
-  history.push({
-    ...data,
-    ts: Date.now(),
+  await prisma.trade.create({
+    data: {
+      time: new Date(data.time),
+      signal: data.signal,
+      price: data.price,
+      pnl: data.pnl ?? null,
+      regime: data.regime,
+      note: data.note,
+    },
   });
-
-  // เก็บแค่ 100 รายการล่าสุด (กัน memory บวม)
-  if (history.length > 100) {
-    history = history.slice(-100);
-  }
 
   return Response.json({ ok: true });
 }
 
 export async function GET() {
+  const trades = await prisma.trade.findMany({
+    orderBy: { time: "desc" },
+    take: 200,
+  });
+
   return Response.json({
-    latest: history[history.length - 1] ?? null,
-    history,
+    latest: trades[0] ?? null,
+    history: trades,
   });
 }
