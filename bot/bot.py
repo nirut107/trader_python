@@ -15,6 +15,8 @@ from datetime import datetime
 from exit import check_exit_5m 
 import requests
 from strategy_utils import detect_market_regime
+from telegram_utils import send_telegram
+
 
 
 MODEL_FILE = "model_year.pkl"
@@ -121,16 +123,16 @@ def log_trade(msg):
 
 def push_summary(summary):
     print(summary)
-    try:
-        r = requests.post(
-            "https://trader-python.vercel.app/api/push",
-            # "http://localhost:3000/api/push",
-            json=summary,
-            timeout=5
-        )
-        print("push_summary:", r.status_code)
-    except Exception as e:
-        print("push_summary ERROR:", e)
+    # try:
+    #     r = requests.post(
+    #         # "https://trader-python.vercel.app/api/push",
+    #         "http://localhost:3000/api/push",
+    #         json=summary,
+    #         timeout=5
+    #     )
+    #     print("push_summary:", r.status_code)
+    # except Exception as e:
+    #     print("push_summary ERROR:", e)
 
 is_hold = False
 
@@ -146,7 +148,7 @@ while True:
     now = last.name
 
     regime = detect_market_regime(df)
-    print("REGIME:", regime, "BUY/SELL:", buy, sell)
+    # print("REGIME:", regime, "BUY/SELL:", buy, sell)
 
     # ---------- BUY ----------
     if signal == "BUY" and not in_position:
@@ -167,6 +169,12 @@ while True:
                 "signal": "BUY",
                 "regime": regime
             })
+            send_telegram(
+                f"🟢 *BUY*\n"
+                f"Price: {price:.2f}\n"
+                f"Regime: {regime}"
+            )
+
 
     # ---------- IN POSITION ----------
     elif in_position:
@@ -194,6 +202,14 @@ while True:
                 "pnl": pnl,
                 "regime": regime
             })
+            send_telegram(
+                "🚨🚨🚨 *{exit_reason}*\n"
+                "━━━━━━━━━━━━━━\n"
+                f"Price: {price:.2f}\n"
+                f"PnL: {pnl:.2f}%\n"
+                f"Regime: {regime}"
+            )
+
 
             in_position = False
             entry_price = None
@@ -214,3 +230,4 @@ while True:
     time.sleep(20)
 
 
+# 8559021305:AAGWBCaz0-aNWiRsTY0BN9Pq02J-NE_FZLs
