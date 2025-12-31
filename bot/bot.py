@@ -123,16 +123,16 @@ def log_trade(msg):
 
 def push_summary(summary):
     print(summary)
-    # try:
-    #     r = requests.post(
-    #         # "https://trader-python.vercel.app/api/push",
-    #         "http://localhost:3000/api/push",
-    #         json=summary,
-    #         timeout=5
-    #     )
-    #     print("push_summary:", r.status_code)
-    # except Exception as e:
-    #     print("push_summary ERROR:", e)
+    try:
+        r = requests.post(
+            "https://trader-python.vercel.app/api/push",
+            # "http://localhost:3000/api/push",
+            json=summary,
+            timeout=5
+        )
+        print("push_summary:", r.status_code)
+    except Exception as e:
+        print("push_summary ERROR:", e)
 
 is_hold = False
 
