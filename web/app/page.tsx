@@ -14,12 +14,17 @@ export default function Page() {
   const [history, setHistory] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [dark, setDark] = useState(false);
+  const [sell, setSell] = useState<Event[]>([]);
 
   async function load() {
     const res = await fetch("/api/push", { cache: "no-store" });
     const json = await res.json();
     setLatest(json.latest ?? null);
     setHistory(json.history ?? []);
+    const sell = json.history.filter(
+      (e: Event) => e.signal != "BUY" && e.signal != "HOLD"
+    );
+    setSell(sell);
     setLoading(false);
   }
 
@@ -37,6 +42,7 @@ export default function Page() {
       .reduce((s, e) => s + (e.pnl ?? 0), 0);
   }, [history]);
 
+  const regimeSell = useMemo(() => calcRegimeStats(sell), [sell]);
   const regimeStats = useMemo(() => calcRegimeStats(history), [history]);
 
   type Regime = "UPTREND" | "SIDEWAYS" | "DOWNTREND";
@@ -215,9 +221,9 @@ export default function Page() {
       <h3>📊 Regime Stats</h3>
 
       <div style={{ fontSize: 14, marginBottom: 24 }}>
-        {Object.entries(regimeStats).map(([regime, s]) => {
+        {Object.entries(regimeSell).map(([regime, s]) => {
           if (s.trades === 0) return null;
-
+          console.log(regime);
           const winRate = (s.wins / s.trades) * 100;
           const avgPnl = s.totalPnl / s.trades;
 
@@ -274,14 +280,14 @@ export default function Page() {
                 borderBottom: `1px solid ${border}`,
                 padding: "8px 0",
                 opacity: i === 0 ? 1 : 0.85,
-                fontWeight: i === 0 ? "bold" : "normal", // 🔔 latest highlight
+                fontWeight: i === 0 ? "bold" : "normal",
               }}
             >
               <div>
                 {e.signal} {e.price && `@ ${Number(e.price).toFixed(2)}`}
               </div>
 
-              {e.pnl !== undefined && (
+              {e.pnl !== undefined && e.signal != "HOLD" && e.signal != "BUY"  && (
                 <div
                   style={{
                     color: e.pnl >= 0 ? "#22c55e" : "#ef4444",

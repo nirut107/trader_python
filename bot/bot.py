@@ -106,9 +106,7 @@ entry_price = None
 entry_time = None
 
 LOG_FILE = "trade.log"
-STOP_LOSS = -0.5    # %
-TAKE_PROFIT = 0.2  # %
-MAX_HOLD_MIN = 60  # นาที
+
 
 
 def log_trade(msg):
@@ -118,8 +116,8 @@ def log_trade(msg):
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
-# SENT="http://localhost:3000/api/push"
-SENT="https://trader-python.vercel.app/api/push"
+SENT="http://localhost:3000/api/push"
+# SENT="https://trader-python.vercel.app/api/push"
 
 def push_summary(summary):
     print(summary)
@@ -170,7 +168,7 @@ while True:
                 "signal": "BUY",
                 "regime": regime
             })
-            if SENT == "http://localhost:3000/api/push":
+            if SENT != "http://localhost:3000/api/push":
                 send_telegram(
                     f"🟢 *BUY*\n"
                     f"Price: {price:.2f}\n"
