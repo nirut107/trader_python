@@ -109,6 +109,7 @@ LOG_FILE = "trade.log"
 
 
 
+
 def log_trade(msg):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
@@ -134,6 +135,7 @@ def push_summary(summary):
 
 is_hold = False
 is_timeout = False
+max_pnl = 0
 
 while True:
     df = load_ohlcv_from_db()
@@ -189,12 +191,25 @@ while True:
             entry_time,
             max_price,
             tighten=tighten,
-            is_timeout=is_timeout
+            is_timeout=is_timeout,
         )
+        if pnl > max_pnl:
+            max_pnl = pnl
+        elif max_pnl >0.1 and pnl > 0:
+            if SENT != "http://localhost:3000/api/push":
+                send_telegram(
+                    f"🚨🚨🚨 *GETBEFOREDOWN*\n"
+                    "━━━━━━━━━━━━━━\n"
+                    f"Price: {price:.2f}\n"
+                    f"PnL: {pnl:.2f}%\n"
+                    f"Regime: {regime}"
+                )
+                max_pnl = 0
+            continue
+
         # ----- EXIT -----
         if exit_reason == "TIME_EXIT" and pnl < 0 and not is_timeout  :
             is_timeout = True
-            time.sleep(20)
             continue
         if exit_reason:
             log_trade(f"{exit_reason} @ {price:.2f} | PnL={pnl:.2f}%")
@@ -214,13 +229,13 @@ while True:
                     f"PnL: {pnl:.2f}%\n"
                     f"Regime: {regime}"
                 )
-
-
+            max_pnl = 0
             in_position = False
             entry_price = None
             entry_time = None
             max_price = None
             is_hold = False
+            continue
 
         # ----- HOLD (ส่งครั้งเดียว) -----
         elif not is_hold:
