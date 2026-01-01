@@ -107,7 +107,7 @@ entry_time = None
 
 LOG_FILE = "trade.log"
 STOP_LOSS = -0.5    # %
-TAKE_PROFIT = 0.5  # %
+TAKE_PROFIT = 0.2  # %
 MAX_HOLD_MIN = 60  # นาที
 
 
@@ -118,15 +118,15 @@ def log_trade(msg):
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
-
-
+# SENT="http://localhost:3000/api/push"
+SENT="https://trader-python.vercel.app/api/push"
 
 def push_summary(summary):
     print(summary)
     try:
         r = requests.post(
-            "https://trader-python.vercel.app/api/push",
-            # "http://localhost:3000/api/push",
+            SENT
+            ,
             json=summary,
             timeout=5
         )
@@ -135,6 +135,7 @@ def push_summary(summary):
         print("push_summary ERROR:", e)
 
 is_hold = False
+is_timeout = False
 
 while True:
     df = load_ohlcv_from_db()
@@ -148,7 +149,7 @@ while True:
     now = last.name
 
     regime = detect_market_regime(df)
-    # print("REGIME:", regime, "BUY/SELL:", buy, sell)
+    print("REGIME:", regime, "BUY/SELL:", buy, sell)
 
     # ---------- BUY ----------
     if signal == "BUY" and not in_position:
@@ -169,11 +170,12 @@ while True:
                 "signal": "BUY",
                 "regime": regime
             })
-            send_telegram(
-                f"🟢 *BUY*\n"
-                f"Price: {price:.2f}\n"
-                f"Regime: {regime}"
-            )
+            if SENT == "http://localhost:3000/api/push":
+                send_telegram(
+                    f"🟢 *BUY*\n"
+                    f"Price: {price:.2f}\n"
+                    f"Regime: {regime}"
+                )
 
 
     # ---------- IN POSITION ----------
@@ -188,13 +190,17 @@ while True:
             entry_price,
             entry_time,
             max_price,
-            tighten=tighten   # <--- สำคัญ
+            tighten=tighten,
+            is_timeout=is_timeout
         )
-
         # ----- EXIT -----
+        if exit_reason == "TIME_EXIT" and pnl < 0 and not is_timeout  :
+            is_timeout = True
+            time.sleep(20)
+            continue
         if exit_reason:
             log_trade(f"{exit_reason} @ {price:.2f} | PnL={pnl:.2f}%")
-
+            is_timeout = False
             push_summary({
                 "time": str(now),
                 "price": price,
@@ -202,13 +208,14 @@ while True:
                 "pnl": pnl,
                 "regime": regime
             })
-            send_telegram(
-                "🚨🚨🚨 *{exit_reason}*\n"
-                "━━━━━━━━━━━━━━\n"
-                f"Price: {price:.2f}\n"
-                f"PnL: {pnl:.2f}%\n"
-                f"Regime: {regime}"
-            )
+            if SENT != "http://localhost:3000/api/push":
+                send_telegram(
+                    f"🚨🚨🚨 *{exit_reason}*\n"
+                    "━━━━━━━━━━━━━━\n"
+                    f"Price: {price:.2f}\n"
+                    f"PnL: {pnl:.2f}%\n"
+                    f"Regime: {regime}"
+                )
 
 
             in_position = False
