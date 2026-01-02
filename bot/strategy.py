@@ -5,7 +5,9 @@ from exchange_utils import  get_position_from_trades, sell_all,exchange,get_dyna
 from trailing import check_adaptive_atr_trailing
 from state_utils import set_highest_price
 
-def strategy(df, forecast_buy, forecast_sell):
+# def strategy(df, forecast_buy, forecast_sell):
+
+def strategy(df):
     # --- indicators (ensure exist) ---
     if 'ema50' not in df:
         df['ema50'] = ta.trend.EMAIndicator(df['close'], 50).ema_indicator()
@@ -17,7 +19,6 @@ def strategy(df, forecast_buy, forecast_sell):
 
     # --- BUY condition ---
     if (
-        forecast_buy and
         last.ema50 > last.ema200 and
         last.rsi > 50
     ):
@@ -25,7 +26,6 @@ def strategy(df, forecast_buy, forecast_sell):
 
     # --- SELL condition ---
     if (
-        forecast_sell and
         last.ema50 < last.ema200 and
         last.rsi < 50
     ):

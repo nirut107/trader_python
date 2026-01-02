@@ -16,6 +16,9 @@ from exit import check_exit_5m
 import requests
 from strategy_utils import detect_market_regime
 from telegram_utils import send_telegram
+import sys
+from fetchdata import load_ohlcv_from_db, get_realtime_price
+import gc
 
 
 
@@ -26,39 +29,7 @@ def fetch_data():
     df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','vol'])
     return df
 
-def load_ohlcv_from_db():
-    conn = sqlite3.connect("ohlcv.db")
-    c = conn.cursor()
 
-    c.execute("SELECT MAX(ts) FROM ohlcv")
-    result = c.fetchone()
-    last_ts = result[0] if result[0] else None
-    
-    if last_ts:
-        since = last_ts + 60 * 1000
-    else:
-        since = exchange_real.parse8601('2024-09-01T00:00:00Z')
-
-    all_new = []
-
-    while True:
-        ohlcv = exchange_real.fetch_ohlcv(SYMBOL, TIMEFRAME, since=since, limit=1000)
-        # print(since)
-        if not ohlcv:
-            break
-        all_new.extend(ohlcv)
-        since = ohlcv[-1][0] + 60 * 1000
-        if len(ohlcv) < 1000:
-            break
-        time.sleep(0.2)
-
-    if all_new:
-        df_new = pd.DataFrame(all_new, columns=['ts','open','high','low','close','vol'])
-        save_ohlcv_to_db(df_new)
-
-    df_all = load_recent_data()
-    conn.close()
-    return df_all
 
 def add_features(df):
     df = df.copy()
@@ -66,6 +37,7 @@ def add_features(df):
     df['ts'] = pd.to_datetime(df['ts'], unit='ms')
     df = df.set_index('ts')
     df = df.sort_index()
+
 
     df['hour'] = df.index.hour
     df['day'] = df.index.dayofweek
@@ -117,8 +89,8 @@ def log_trade(msg):
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
-SENT="http://localhost:3000/api/push"
-# SENT="https://trader-python.vercel.app/api/push"
+# SENT="http://localhost:3000/api/push"
+SENT="https://trader-python.vercel.app/api/push"
 
 def push_summary(summary):
     print(summary)
@@ -133,36 +105,53 @@ def push_summary(summary):
     except Exception as e:
         print("push_summary ERROR:", e)
 
-is_hold = False
-is_timeout = False
-max_pnl = 0
+in_position = False
+entry_price = None
+entry_time = None
+max_price = 0
+last_candle_ts =None
+ALLOW_REGIME = "UPTREND"
+MAX_CANDLES = 500
+loop_count = 0
+
+
+
 
 while True:
     df = load_ohlcv_from_db()
-    df = add_features(df)
-    last = df.iloc[-1]
+    df = df.tail(MAX_CANDLES).copy()
+    last_candle = df.iloc[-1]
+    current_candle_ts = last_candle.name
+    now = datetime.utcnow()
 
-    model, buy, sell = predict_signal(model, last, cfg["features"])
-    signal = strategy(df, buy, sell)
+    # --------- STRATEGY (5m) ----------
+    if current_candle_ts != last_candle_ts:
+        df = add_features(df)
+        last_candle_ts = current_candle_ts
 
-    price = float(last["close"])
-    now = last.name
+        regime = detect_market_regime(df)
+        signal = strategy(df)
 
-    regime = detect_market_regime(df)
-    print("REGIME:", regime, "BUY/SELL:", buy, sell)
+        print("NEW CANDLE:", current_candle_ts)
+        print("REGIME:", regime, "SIGNAL:", signal)
 
     # ---------- BUY ----------
     if signal == "BUY" and not in_position:
-        if regime != "UPTREND":
-            print("BLOCK BUY: regime =", regime)
+        if regime != ALLOW_REGIME:
+            print("BLOCK BUY:", regime)
         else:
+            price = get_realtime_price(
+                exchange_real,
+                SYMBOL,
+                side="buy"
+            )
+            
             in_position = True
             entry_price = price
             entry_time = now
             max_price = price
-            is_hold = False
 
-            log_trade(f"BUY @ {entry_price:.2f} | time={entry_time}")
+            log_trade(f"BUY @ {price:.2f} | {now}")
 
             push_summary({
                 "time": str(now),
@@ -170,50 +159,37 @@ while True:
                 "signal": "BUY",
                 "regime": regime
             })
-            if SENT != "http://localhost:3000/api/push":
-                send_telegram(
-                    f"🟢 *BUY*\n"
-                    f"Price: {price:.2f}\n"
-                    f"Regime: {regime}"
-                )
 
+            send_telegram(
+                f"🟢 *BUY*\n"
+                f"Price: {price:.2f}\n"
+                f"Regime: {regime}"
+            )
 
     # ---------- IN POSITION ----------
     elif in_position:
+        price = get_realtime_price(
+            exchange_real,
+            SYMBOL,
+            side="sell"
+        )
+        if price is not None:
+            now = datetime.utcnow()
         max_price = max(max_price, price)
 
-        # ถ้าเป็น DOWNTREND → ให้ exit ง่ายขึ้น
-        tighten = (regime == "DOWNTREND")
-
         exit_reason, pnl = check_exit_5m(
-            df,
+            price,
             entry_price,
             entry_time,
-            max_price,
-            tighten=tighten,
-            is_timeout=is_timeout,
+            max_price
         )
-        if pnl > max_pnl:
-            max_pnl = pnl
-        elif max_pnl >0.1 and pnl > 0:
-            if SENT != "http://localhost:3000/api/push":
-                send_telegram(
-                    f"🚨🚨🚨 *GETBEFOREDOWN*\n"
-                    "━━━━━━━━━━━━━━\n"
-                    f"Price: {price:.2f}\n"
-                    f"PnL: {pnl:.2f}%\n"
-                    f"Regime: {regime}"
-                )
-                max_pnl = 0
-            continue
 
-        # ----- EXIT -----
-        if exit_reason == "TIME_EXIT" and pnl < 0 and not is_timeout  :
-            is_timeout = True
-            continue
+        print("EXIT_CHECK:", exit_reason, pnl)
+        print("REAL TIME PRICE", price)
+
         if exit_reason:
             log_trade(f"{exit_reason} @ {price:.2f} | PnL={pnl:.2f}%")
-            is_timeout = False
+
             push_summary({
                 "time": str(now),
                 "price": price,
@@ -221,33 +197,24 @@ while True:
                 "pnl": pnl,
                 "regime": regime
             })
-            if SENT != "http://localhost:3000/api/push":
-                send_telegram(
-                    f"🚨🚨🚨 *{exit_reason}*\n"
-                    "━━━━━━━━━━━━━━\n"
-                    f"Price: {price:.2f}\n"
-                    f"PnL: {pnl:.2f}%\n"
-                    f"Regime: {regime}"
-                )
-            max_pnl = 0
+
+            send_telegram(
+                f"🔴 *{exit_reason}*\n"
+                f"Price: {price:.2f}\n"
+                f"PnL: {pnl:.2f}%"
+            )
+
+            # reset state
             in_position = False
             entry_price = None
             entry_time = None
             max_price = None
-            is_hold = False
-            continue
+    if loop_count == 50:
+        gc.collect()
+        loop_count = 0
+    loop_count += 1
+    time.sleep(5)
 
-        # ----- HOLD (ส่งครั้งเดียว) -----
-        elif not is_hold:
-            push_summary({
-                "time": str(now),
-                "price": price,
-                "signal": "HOLD",
-                "regime": regime
-            })
-            is_hold = True
-
-    time.sleep(20)
 
 
 # 8559021305:AAGWBCaz0-aNWiRsTY0BN9Pq02J-NE_FZLs

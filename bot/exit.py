@@ -1,40 +1,39 @@
-def check_exit_5m(df, entry_price, entry_time, max_price, tighten=False, is_timeout=False):
-    last = df.iloc[-1]
-    price = float(last.close)
-    now = last.name
+from datetime import datetime
+
+def check_exit_5m(
+    price,
+    entry_price,
+    entry_time,
+    max_price
+):
+    now = datetime.utcnow()
 
     pnl_pct = (price - entry_price) / entry_price * 100
     hold_min = (now - entry_time).total_seconds() / 60
 
-    # -------------------------
-    # PARAMS (ปรับตาม tighten)
-    # -------------------------
-    HARD_SL = -0.4 if not tighten else -0.25
-    TIME_LIMIT = 25 if not tighten else 15
-    MIN_PROFIT_TIME_EXIT = 0.15 if not tighten else 0.1
-    TRAIL_PCT = 0.2 if not tighten else 0.1
-    RSI_EXIT = 45 if not tighten else 50
-    TAKE_PROFIT = 0.3 if not tighten else 0.1
+    # ---- PARAMS (SAFE SCALP) ----
+    ENTRY_SL = -0.15
+    TAKE_PROFIT = 0.2
+    TRAIL_PCT = 0.1
+    MAX_HOLD_MIN = 10
+    MIN_MOVE = 0.05
 
-    # 1) HARD STOP
-    if pnl_pct <= HARD_SL:
+    # 0) ENTRY STOP
+    if pnl_pct <= ENTRY_SL:
         return "STOP_LOSS", pnl_pct
 
-    # 2) TIME STOP
-    if hold_min >= TIME_LIMIT and pnl_pct < MIN_PROFIT_TIME_EXIT:
-        if is_timeout and pnl_pct > 0.01:
-            return "TIME_EXIT", pnl_pct
-        elif not is_timeout:
-            return "TIME_EXIT", pnl_pct
-
-    # 3) TRAILING PROFIT
+    # 1) TAKE PROFIT
     if pnl_pct >= TAKE_PROFIT:
+        return "TAKE_PROFIT", pnl_pct
+
+    # 2) TIME EXIT
+    if hold_min >= MAX_HOLD_MIN and pnl_pct < MIN_MOVE and pnl_pct > 0:
+        return "TIME_EXIT", pnl_pct
+
+    # 3) TRAIL (after TP)
+    if pnl_pct > TAKE_PROFIT:
         trail_price = max_price * (1 - TRAIL_PCT / 100)
         if price <= trail_price:
             return "TRAIL_STOP", pnl_pct
-
-    # 4) TECH EXIT
-    if last.rsi < RSI_EXIT and last.ema50 < last.ema200:
-        return "TECH_EXIT", pnl_pct
 
     return None, pnl_pct
