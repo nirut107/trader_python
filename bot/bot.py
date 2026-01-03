@@ -113,6 +113,7 @@ last_candle_ts =None
 ALLOW_REGIME = "UPTREND"
 MAX_CANDLES = 500
 loop_count = 0
+last_regime = ""
 
 
 
@@ -138,7 +139,9 @@ while True:
     # ---------- BUY ----------
     if signal == "BUY" and not in_position:
         if regime != ALLOW_REGIME:
-            print("BLOCK BUY:", regime)
+            if last_regime != regime:
+                print("BLOCK BUY:", regime)
+                last_regime = regime
         else:
             price = get_realtime_price(
                 exchange_real,
