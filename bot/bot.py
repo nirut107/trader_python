@@ -213,7 +213,7 @@ while True:
         gc.collect()
         loop_count = 0
     loop_count += 1
-    time.sleep(5)
+    time.sleep(2)
 
 
 
