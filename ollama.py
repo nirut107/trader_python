@@ -1,22 +1,26 @@
 from fastapi import FastAPI, HTTPException
 import ollama
 import os
+import requests
 
 app = FastAPI()
 
-API_KEY = os.getenv("API_KEY", "devkey")
 
 @app.post("/chat")
-def chat(payload: dict, x_api_key: str | None = None):
+def chat(payload: dict, model:str="mistral",):
     prompt = payload.get("prompt")
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Missing prompt")
-
-    resp = ollama.chat(
-        model="mistral",
-        messages=[{"role": "user", "content": prompt}]
+    
+    response = requests.post(
+        'http://localhost:11434/api/generate',
+        json={
+            'model': 'mistral',
+            'prompt': prompt,
+            'stream': False
+        }
     )
 
+    print(response.json()['response'])
+
     return {
-        "answer": resp["message"]["content"]
+        "answer": response.json()['response']
     }
